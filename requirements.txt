@@ -1,0 +1,10 @@
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+pyautogui>=0.9.54
+mss>=9.0.1
+pillow>=10.0.0
+pynput>=1.7.6
+
+# Optional: For API interception
+# mitmproxy>=10.0.0

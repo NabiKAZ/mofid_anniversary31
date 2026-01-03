@@ -10,6 +10,7 @@
  * @channel https://t.me/BotSorati
  * @see     https://landing.emofid.com/anniversary40/login?invite_code=NV4NI3
  * @project https://github.com/NabiKAZ/mofid_anniversary31
+ * @version 2.0.0
  * @license MIT
  * 
  * Features:
@@ -78,6 +79,44 @@ function delay(ms) {
 }
 
 /**
+ * Generate a realistic fractional duration in seconds matching observed pattern
+ * Uses mathematical formula: (random5digit + 1/3) / 100000 to create repeating '3' pattern
+ * @param {number} baseMs - Base duration in milliseconds
+ * @returns {number} Duration in seconds with realistic fractional pattern
+ */
+function generateRealisticDuration(baseMs) {
+    const seconds = Math.floor(baseMs / 1000);
+    
+    // Generate 5-digit random number (0-99999)
+    const random5Digit = Math.floor(Math.random() * 100000);
+    
+    // Mathematical formula: (BaseRandom + 1/3) / 100000
+    // This creates the pattern: 5digits followed by repeating 3s
+    const decimalValue = (random5Digit + 1/3) / 100000;
+    
+    // Combine and limit precision to 14 digits for consistency
+    return parseFloat((seconds + decimalValue).toFixed(14));
+}
+
+/**
+ * Compute 'What' duration (integer seconds) from a simulated duration value.
+ * Picks a random offset between minOffsetSec and maxOffsetSec (defaults 1–4s).
+ * Options allow changing rounding behavior for testing.
+ * @param {number} simulatedDurationSec - duration in seconds (float)
+ * @param {object} [options] - { minOffsetSec:number, maxOffsetSec:number, rounding: 'round'|'floor'|'ceil' }
+ * @returns {number} integer seconds to use as What (>=0)
+ */
+function computeWhatDuration(simulatedDurationSec, options = {}) {
+    const { minOffsetSec = 1, maxOffsetSec = 4, rounding = 'round' } = options;
+    const offset = minOffsetSec + Math.random() * (maxOffsetSec - minOffsetSec);
+    let value = simulatedDurationSec - offset;
+    if (rounding === 'floor') value = Math.floor(value);
+    else if (rounding === 'ceil') value = Math.ceil(value);
+    else value = Math.round(value);
+    return Math.max(0, value);
+}
+
+/**
  * Generate HMAC-SHA256 signature for a message
  * @param {string} message - The message to sign
  * @returns {string} Hex string of the signature
@@ -105,6 +144,7 @@ function encodeScore(points) {
     
     // Final format: score.timestamp.signature
     const finalString = `${payload}${DELIMITER}${signature}`;
+    // console.log('Payload before base64 (score.timestamp.signature):', finalString); //TODO:debug
     
     // Encode to base64
     const encoded = Buffer.from(finalString).toString('base64');
@@ -154,28 +194,78 @@ function decodeScore(encoded) {
 }
 
 /**
- * Check if user can start the game
+ * Start the game
  * @param {string} token - Authorization token (user_id|api_token)
  * @param {string} game - Game name (rocket or shooter)
- * @returns {Promise<object>} Response with can_start, total_points, remaining_chances
+ * @returns {Promise<object>} Response with can_start, coins_required, user_coins
  */
 async function startGame(token, game = 'rocket') {
     try {
-        const url = `${API_BASE}/can-start?game=${game}`;
+        const url = `${API_BASE}/missions/${game}/start/`;
         
         const response = await fetch(url, {
-            method: 'GET',
+            method: 'POST',
             headers: {
-                'authorization': `Bearer ${token}`,
-                'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Microsoft Edge";v="144"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"'
+                'Authorization': `Bearer ${token}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Priority': 'u=4',
+                'Cookie': `anniversary40_token=${token};`,
             },
+            referrer: 'https://landing.emofid.com/anniversary40/games/',
             agent: getAgent()
         });
         
         const data = await response.json();
         
+        return {
+            success: true,
+            canStart: data.can_start === true,
+            coinsRequired: data.coins_required,
+            userCoins: data.user_coins,
+            raw: data
+        };
+    } catch (error) {
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Check whether a game can start (GET /can-start?game=<game>)
+ * @param {string} token - Authorization token (user_id|api_token)
+ * @param {string} game - Game name (rocket or shooter)
+ * @returns {Promise<object>} Response with can_start, coins_required, user_coins
+ */
+async function checkCanStart(token, game = 'rocket') {
+    try {
+        const url = `${API_BASE}/can-start?game=${encodeURIComponent(game)}`;
+
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Priority': 'u=4',
+                'Cookie': `anniversary40_token=${token};`,
+            },
+            referrer: 'https://landing.emofid.com/anniversary40/games/',
+            agent: getAgent()
+        });
+
+        const data = await response.json();
+
         return {
             success: true,
             canStart: data.can_start === 1,
@@ -196,7 +286,7 @@ async function startGame(token, game = 'rocket') {
  * @param {string} token - Authorization token (user_id|api_token)
  * @param {number} score - Game score
  * @param {string} missionName - Game name (rocket or shooter)
- * @param {number} duration - Remaining time (ms or sec per backend) when lives ended; if time expires but lives remain, send 0
+ * @param {number} duration - Game duration in milliseconds
  * @returns {Promise<object>} Response with success status and message
  */
 async function finishGame(token, score, missionName = 'rocket', duration = 0) {
@@ -204,27 +294,40 @@ async function finishGame(token, score, missionName = 'rocket', duration = 0) {
         // Encode the score
         const pointsEarned = encodeScore(score);
         
-        const url = `${API_BASE}/finish-game`;
+        // Derive a realistic duration (seconds with fractional part) from base ms
+        const simulatedDurationSec = generateRealisticDuration(duration);
         
+        // Compute What using helper (default: offset 1-4s, rounding=round)
+        const whatDurationSec = computeWhatDuration(simulatedDurationSec);
+        const whatEncoded = encodeScore(whatDurationSec);
+        
+        const url = `${API_BASE}/finish-game/`;
+
         const body = {
             points_earned: pointsEarned,
             mission_name: missionName,
-            duration: duration
+            duration: simulatedDurationSec
         };
         
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'authorization': `Bearer ${token}`,
-                'content-type': 'application/json',
-                'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Microsoft Edge";v="144"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"'
+                'Authorization': `Bearer ${token}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'Priority': 'u=4',
+                'Cookie': `anniversary40_token=${token};`,
+                'What': whatEncoded,
             },
+            referrer: 'https://landing.emofid.com/anniversary40/games/',
             body: JSON.stringify(body),
             agent: getAgent()
         });
-        
+
         const data = await response.json();
         
         return {
@@ -232,6 +335,9 @@ async function finishGame(token, score, missionName = 'rocket', duration = 0) {
             message: data.message,
             score: score,
             encoded: pointsEarned,
+            simulatedDurationSec,
+            whatDurationSec,
+            what: whatEncoded,
             raw: data
         };
     } catch (error) {
@@ -245,17 +351,16 @@ async function finishGame(token, score, missionName = 'rocket', duration = 0) {
 // Example usage
 async function runExample() {
     // Constants
-    const PROXY = 'http://127.0.0.1:8080'; // Set to null or '' to disable proxy
+    const PROXY = ''; // Set to null or '' to disable proxy or e.g. 'http://127.0.0.1:8080'
     const TOKEN = '11111|111111111111111111111111111111111111111111111111'; // Replace with valid token
-    const GAME_DELAY_MS = 3000; // Simulated game duration
-    const SCORE = 1500; // Example score
-    const REMAINING_TIME_SEC = 0; // Remaining time when game ends
+    const DURATION = 10000; // Game duration in milliseconds
+    const SCORE = 5000; // Example score
     const GAME_NAME = 'rocket'; // Game name: 'rocket' or 'shooter'
     
     console.log('=== Score Encoding Example ===\n');
     
     // Set proxy for debugging (uncomment to use)
-    // setGlobalProxy(PROXY);
+    setGlobalProxy(PROXY);
     
     // Encode a score
     console.log(`Original Score: ${SCORE}`);
@@ -278,33 +383,50 @@ async function runExample() {
     console.log('=== API Example ===\n');
     console.log(`Token: ${TOKEN.substring(0, 20)}...`);
     console.log(`Game: ${GAME_NAME}`);
-    console.log(`Delay: ${GAME_DELAY_MS}ms`);
-    console.log(`Score: ${SCORE}`);
-    console.log(`Remaining Time: ${REMAINING_TIME_SEC}\n`);
+    console.log(`Duration: ${DURATION}ms`);
+    console.log(`Score: ${SCORE}\n`);
     
-    // 1. Check if can start game
-    console.log('1. Checking if can start game...');
-    const checkStart = await startGame(TOKEN, GAME_NAME);
-    console.log(`   Can Start: ${checkStart.canStart}`);
-    console.log(`   Total Points: ${checkStart.totalPoints}`);
-    console.log(`   Remaining Chances: ${checkStart.remainingChances}\n`);
-    
-    if (!checkStart.canStart) {
-        console.log('❌ Cannot start game. Skipping score submission.\n');
+    // 1. Start the game
+    console.log('1. Starting the game...');
+    const startRes = await startGame(TOKEN, GAME_NAME);
+    console.log(`   Raw: `, startRes.raw);
+    console.log(`   Can Start: ${startRes.canStart}`);
+    console.log(`   Coins Required: ${startRes.coinsRequired}`);
+    console.log(`   User Coins: ${startRes.userCoins}\n`);
+
+    if (!startRes.canStart) {
+        console.log('❌ Start failed. Aborting.\n');
         return;
     }
-    
-    // 2. Simulate game duration
-    console.log(`2. Simulating game play (${GAME_DELAY_MS / 1000} second delay)...`);
-    await delay(GAME_DELAY_MS);
+
+    // 2. Check can-start after starting
+    console.log('2. Checking can-start after starting the game...');
+    const postStartCheck = await checkCanStart(TOKEN, GAME_NAME);
+    console.log(`   Raw: `, postStartCheck.raw);
+    console.log(`   Can Start: ${postStartCheck.canStart}`);
+    console.log(`   Total Points: ${postStartCheck.totalPoints}`);
+    console.log(`   Remaining Chances: ${postStartCheck.remainingChances}\n`);
+
+    if (!postStartCheck.canStart) {
+        console.log('❌ Cannot continue (can-start false after start). Aborting.\n');
+        return;
+    }
+
+    // 3. Simulate game duration
+    console.log(`3. Simulating game play (${DURATION / 1000} second delay)...`);
+    await delay(DURATION);
     console.log('   Game finished!\n');
-    
-    // 3. Submit score
-    console.log('3. Submitting score...');
-    const result = await finishGame(TOKEN, SCORE, GAME_NAME, REMAINING_TIME_SEC);
+
+    // 4. Submit score
+    console.log('4. Submitting score...');
+    const result = await finishGame(TOKEN, SCORE, GAME_NAME, DURATION);
+    console.log(`   Raw: `, result.raw);
     console.log(`   Success: ${result.success}`);
     console.log(`   Message: ${result.message}`);
-    console.log(`   Encoded Score: ${result.encoded}\n`);
+    console.log(`   Encoded Score: ${result.encoded}`);
+    console.log(`   Simulated Duration (sec): ${result.simulatedDurationSec}`);
+    console.log(`   What Duration (sec): ${result.whatDurationSec}`);
+    console.log(`   What Encoded: ${result.what}\n`);
 }
 
 // Export functions
@@ -313,9 +435,12 @@ export {
     decodeScore,
     generateHMAC,
     startGame,
+    checkCanStart,
     finishGame,
     setGlobalProxy,
     delay,
+    generateRealisticDuration,
+    computeWhatDuration,
     SECRET_KEY,
     DELIMITER
 };

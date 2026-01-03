@@ -23,6 +23,7 @@ class Anniversary40Interceptor:
         print("[Anniversary40] Interceptor loaded!")
         print("[Anniversary40] Intercepting:")
         print("  - /api-service/anniversary40/can-start")
+        print("  - /api-service/anniversary40/missions/*/start/")
         print("  - /api-service/anniversary40/finish-game")
         print("  - /games/shooter/texts.json")
     
@@ -53,6 +54,41 @@ class Anniversary40Interceptor:
             )
             
             print(f"[✓] Intercepted can-start for game: {flow.request.query.get('game', 'unknown')}")
+            return
+        
+        # Check if it's a request to any mission start endpoint
+        if ENABLE_GAME_API_INTERCEPTION and "landing.emofid.com" in flow.request.pretty_host and \
+           "/api-service/anniversary40/missions/" in flow.request.path and \
+           "/start/" in flow.request.path:
+            
+            # Try to extract mission name from path
+            mission = "unknown"
+            try:
+                path_part = flow.request.path.split("/missions/")[1]
+                mission = path_part.split("/")[0] or "unknown"
+            except Exception:
+                pass
+            
+            # Create fake response
+            fake_response = {
+                "can_start": True,
+                "coins_required": "10.0",
+                "user_coins": "60.00"
+            }
+            
+            # Return fake response immediately
+            flow.response = http.Response.make(
+                200,  # Status code
+                json.dumps(fake_response),  # Body
+                {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization"
+                }
+            )
+            
+            print(f"[✓] Intercepted {mission}/start - Fake response returned!")
             return
         
         # Check if it's a request to finish-game

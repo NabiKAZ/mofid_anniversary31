@@ -79,6 +79,35 @@ function delay(ms) {
 }
 
 /**
+ * Countdown delay with periodic logging
+ * @param {number} ms - Total milliseconds to wait
+ * @param {number} stepMs - Interval for updates
+ */
+async function countdownDelay(ms, stepMs = 1000) {
+    let remaining = ms;
+
+    function formatHMS(msLeft) {
+        let totalSec = Math.ceil(msLeft / 1000);
+        const h = Math.floor(totalSec / 3600);
+        const m = Math.floor((totalSec % 3600) / 60);
+        const s = totalSec % 60;
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // Initial display
+    process.stdout.write(`   Remaining: ${formatHMS(remaining)}`);
+
+    while (remaining > 0) {
+        const chunk = Math.min(stepMs, remaining);
+        await delay(chunk);
+        remaining -= chunk;
+        process.stdout.write(`\r   Remaining: ${formatHMS(remaining)}   `);
+    }
+
+    process.stdout.write('\n');
+}
+
+/**
  * Generate a realistic fractional duration in seconds matching observed pattern
  * Uses mathematical formula: (random5digit + 1/3) / 100000 to create repeating '3' pattern
  * @param {number} baseMs - Base duration in milliseconds
@@ -414,7 +443,7 @@ async function runExample() {
 
     // 3. Simulate game duration
     console.log(`3. Simulating game play (${DURATION / 1000} second delay)...`);
-    await delay(DURATION);
+    await countdownDelay(DURATION, 1000);
     console.log('   Game finished!\n');
 
     // 4. Submit score

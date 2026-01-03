@@ -5,6 +5,8 @@
 ورود به رویداد: \
 https://landing.emofid.com/anniversary40/login?invite_code=NV4NI3
 
+اطلاعات و اخبار بیشتر در مورد این پروژه در کانال تلگرام از این پست به بعد: \
+https://t.me/BotSorati/909
 
 _عکس: درحال کار و مهندسی معکوس و تست:_ \
 <img width="1920" height="1032" alt="درحال کار و تست" src="https://github.com/user-attachments/assets/b1aeaabf-efa4-4527-b4d5-185982101f23" />
@@ -156,6 +158,10 @@ python shooter_bot.py --calibrate --debug --delay 0.15
 
 _عکس: ثبت رکورد فیک (هم برای راکت هم شوتر)_ \
 <img width="952" height="676" alt="ثبت رکورد فیک (هم برای راکت هم شوتر)" src="https://github.com/user-attachments/assets/65cf37e3-08c3-4e53-9cb3-522b48d288af" />
+
+_فیلم: ثبت رکورد فیک با استفاده از ماژول رمزگذاری امتیاز (نسخه ۲ و اصلاح شده):_
+
+https://github.com/user-attachments/assets/101b225f-f238-4c0c-8de2-98af97f950fa
 
 پیاده‌سازی تمیز سیستم رمزگذاری امتیاز بازی با استفاده از HMAC-SHA256.
 
